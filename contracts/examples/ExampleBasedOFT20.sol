@@ -12,8 +12,7 @@ interface IFactory {
 }
 
 contract Xyn is BasedOFT {
-    bool private tradingActivated = false;
-    uint private blockForPenaltyEnd;
+    uint private blockForTradingStart;
     address public lpPairLaunch = address(0);
     address private tokensaleContract = address(0);
     address public FACTORY;
@@ -34,38 +33,31 @@ contract Xyn is BasedOFT {
     function _transfer(address from, address to, uint amount) internal override {
         require(from != address(0), "ERC20: transfer from the zero address");
 
-        if (!tradingActivated) {
+        if (!tradingActive()) {
             require(_msgSender() == owner() || _msgSender() == tokensaleContract || _msgSender() == ROUTER, "Trading is not active.");
         }
 
-        if (earlyBuyPenaltyInEffect() && from == lpPairLaunch && to != lpPairLaunch) {
-            if (!restrictedWallets[to]) {
-                restrictedWallets[to] = true;
-            }
-        }
-
-        if (!earlyBuyPenaltyInEffect() && tradingActivated) {
-            require(!restrictedWallets[from] || to == owner() || to == address(0xdead), "Bots cannot transfer tokens in or out except to owner or dead address.");
+        if (tradingActive() && from == lpPairLaunch && to != lpPairLaunch) {
+            require(_msgSender() == owner(), "Trading is not active");
         }
 
         super._transfer(from, to, amount);
     }
 
-    function earlyBuyPenaltyInEffect() private view returns (bool) {
-        return block.number < blockForPenaltyEnd;
+    function tradingActive() private view returns (bool) {
+        return block.number > blockForTradingStart;
     }
 
-    function enableTrading(uint blocksForPenalty) external onlyOwner {
+    function enableTrading(uint blocksUntilTrading) external onlyOwner {
         require(lpPairLaunch != address(0), "Lp pair not set");
-        require(!tradingActivated, "Trading is already active, cannot relaunch.");
-        require(blocksForPenalty < 3, "Cannot make penalty blocks more than 2");
-        tradingActivated = true;
+        require(!tradingActive(), "Trading is already active, cannot relaunch.");
+        require(blocksUntilTrading < 3, "Cannot make penalty blocks more than 2");
         uint tradingActivatedBlock = block.number;
-        blockForPenaltyEnd = tradingActivatedBlock + blocksForPenalty;
+        blockForTradingStart = tradingActivatedBlock + blocksUntilTrading;
     }
 
     function setTokensaleContract(address _tokensaleContract) external onlyOwner {
-        require(!tradingActivated, "Trading is already active");
+        require(!tradingActive(), "Trading is already active");
         tokensaleContract = _tokensaleContract;
     }
 }
